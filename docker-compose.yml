@@ -1,0 +1,17 @@
+services:
+  ai_engine:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: bash -c "python build_index.py & uvicorn main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - api_default
+      - backend_default
+
+networks:
+  api_default:
+    external: true
+  backend_default:
+    external: true
