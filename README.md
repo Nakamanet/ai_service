@@ -23,18 +23,40 @@ Deux branches ont été utilisées pour isoler cette fonctionnalité et assurer 
 1. **Backend / Racine (`searchBar`)** : Héberge le microservice `ai_service`, l'intégration Docker, et les scripts de Machine Learning.
 2. **Frontend (`dev-searchBar`)** : Contient l'intégration de la modale de recherche dans le projet React / Next.js.
 
+### Optimisations et Nouvelles Fonctionnalités (Mises à jour récentes)
+
+Afin d'améliorer l'expérience utilisateur et la performance du service, plusieurs optimisations majeures ont été implémentées :
+
+1. **Recherche Personnalisée (Scor de Compatibilitate Dual)** : 
+   - Le service accepte désormais un paramètre `user_id`.
+   - Il calcule séparément la compatibilité pour les **Animes** et les **Mangas**.
+   - **Logique de Score** : Chaque élément commun rapporte **1.0 point**, plafonné à **5.0** par catégorie.
+   - Les résultats sont boostés et triés en priorité par ce score de compatibilité.
+   - Deux badges distincts (⭐ X.X anime, ⭐ X.X manga) s'affichent dans l'interface pour une transparence totale.
+
+2. **Indexation Dynamique & Sync de Bibliothèque** : 
+   - Le script `build_index.py` utilise un cache d'embeddings pour éviter de re-calculer les vecteurs du catalogue (80k+ items).
+   - **Mise à jour fréquente** : La synchronisation des bibliothèques se fait toutes les **5 minutes**.
+   - **Fiabilité** : Les métadonnées des bibliothèques sont désormais sauvegardées à chaque itération, garantissant que les ajouts récents d'un utilisateur apparaissent quasi-instantanément dans les scores de ses amis.
+
+3. **Stratégie "User-First"** : 
+   - Les utilisateurs et les posts sont indexés en priorité absolue au démarrage (< 10 secondes). 
+   - L'index est sauvegardé partiellement dès que les membres sont traités, les rendant cherchables immédiatement.
+
 ## Fichiers Modifiés et Ajoutés
 
 * **Frontend** :
-  * `frontend/src/app/components/layout/Navbar.tsx` : Modification de l'icône de recherche pour déclencher l'ouverture de la modale globale.
-  * `frontend/src/app/components/SearchModal.tsx` : [NOUVEAU] Fenêtre modale comprenant un système de filtres par catégories et une pagination par bouton "Charger plus". L'état de l'interface gère les requêtes vers le microservice Python en envoyant les arguments `skip` et `limit`.
+  * `frontend/src/app/components/layout/Navbar.tsx` : Modification de l'icône de recherche.
+  * `frontend/src/app/components/SearchModal.tsx` : Fenêtre modale avec système de filtres, gestion du `user_id` et affichage des badges de compatibilité (steluțe).
+  * `frontend/src/app/lib/library.ts` & `frontend/src/app/lib/catalogue.ts` : Optimisation des requêtes et gestion des limites de débit (Rate Limiting).
 
 * **Backend (AI Microservice)** :
-  * `ai_service/Dockerfile` & `ai_service/docker-compose.yml` : Configuration de l'environnement virtuel Python, montage des volumes, et connexion aux réseaux existants (`api_default`, `backend_default`).
-  * `ai_service/requirements.txt` : Déclarations des dépendances (FastAPI, Uvicorn, psycopg2-binary, sentence-transformers).
-  * `ai_service/build_index.py` : [NOUVEAU] Logique de lecture SQL par batch et encodage NLP en background.
-  * `ai_service/main.py` : [NOUVEAU] API publique. Les fonctions embarquent un algorithme de "Cosine Similarity" (Similarité Cosinus) fusionné avec une vérification exacte sur les chaînes de texte, pour attribuer un score de pertinence aux éléments envoyés vers le front-end.
+  * `ai_service/build_index.py` : Logique d'indexation incrémentale par batchs, gestion du cache d'embeddings et priorité aux utilisateurs.
+  * `ai_service/main.py` : API FastAPI mise à jour pour supporter la personnalisation par `user_id` et le calcul de similarité inter-utilisateurs.
 
 ## Instructions de Déploiement
 Le microservice se déploie via Docker. 
-Positionnez-vous dans le dossier `ai_service` et exécutez `docker compose up -d`. Le système de traitement traitera de manière silencieuse l'ensemble des données en arrière-plan pendant une quinzaine de minutes au premier démarrage. Pour toute la durée de vie du serveur, les recherches renverront un code HTTP 200 quasi-instantané.
+Positionnez-vous à la racine et exécutez `docker compose up -d`. Grâce au nouveau système de cache, le système est opérationnel en quelques secondes si un index existe déjà. Au premier démarrage, les utilisateurs sont disponibles en < 1 minute, tandis que le catalogue complet se synchronise progressivement.
+
+---
+*Dernière mise à jour : 12 Mai 2026*

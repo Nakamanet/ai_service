@@ -59,11 +59,15 @@ async def health_check():
     return {"status": "AI Microservice is running!"}
 
 @app.get("/search")
-def search(q: str = Query(..., min_length=1), filter: str = "all", skip: int = 0, limit: int = 20):
+def search(q: str = Query(..., min_length=1), filter: str = "all", user_id: int = Query(None), skip: int = 0, limit: int = 20):
     load_index_if_available()
     
     if not AI_INDEX:
         return [{"id": "0", "type": "system", "title": "Connexion à la base d'informations...", "description": "Nous récupérons les données depuis le serveur. Cela peut prendre un peu de temps pour établir la connexion à la base de données. Réessayez d'ici une minute !"}]
+
+    current_user_item = None
+    if user_id:
+        current_user_item = next((item for item in AI_INDEX if item["id"] == f"user_{user_id}"), None)
 
     results = []
     
@@ -72,12 +76,39 @@ def search(q: str = Query(..., min_length=1), filter: str = "all", skip: int = 0
         for item in AI_INDEX:
             if filter != "all" and item["type"] != filter:
                 continue
+                
+            # Skip current user from results if they are in the dataset
+            if current_user_item and item["id"] == current_user_item["id"]:
+                continue
             
             score = float(cosine_similarity(query_embedding, item["embedding"]))
             exact_match = search_exact(q, item["text"])
             if score > 0.15 or exact_match:
                 bonified_score = score + (0.5 if exact_match else 0)
+                
                 item_copy = {k: v for k, v in item.items() if k not in ["embedding", "text"]}
+                
+                if current_user_item and item["type"] == "users":
+                    my_anime    = set(current_user_item.get("anime_library", []))
+                    my_manga    = set(current_user_item.get("manga_library", []))
+                    their_anime = set(item.get("anime_library", []))
+                    their_manga = set(item.get("manga_library", []))
+
+                    # Count-based score: 1.0 per common item, max 5.0
+                    # More common items → higher score → appears first in results
+                    anime_inter = my_anime & their_anime
+                    manga_inter = my_manga & their_manga
+
+                    anime_score = round(min(len(anime_inter) * 1.0, 5.0), 1)
+                    manga_score = round(min(len(manga_inter) * 1.0, 5.0), 1)
+
+                    if anime_score > 0 or manga_score > 0:
+                        bonified_score += (anime_score + manga_score)
+                        item_copy["anime_comp_score"]   = anime_score
+                        item_copy["manga_comp_score"]   = manga_score
+                        item_copy["common_anime_count"] = len(anime_inter)
+                        item_copy["common_manga_count"] = len(manga_inter)
+                
                 item_copy["score"] = bonified_score
                 results.append(item_copy)
                 
