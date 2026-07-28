@@ -74,12 +74,13 @@ def search(q: str = Query(..., min_length=1), filter: str = "all", user_id: int 
     if model:
         query_embedding = model.encode(q, show_progress_bar=False)
         for item in AI_INDEX:
+            if "embedding" not in item:
+                continue
+                
             if filter != "all" and item["type"] != filter:
                 continue
                 
-            # Skip current user from results if they are in the dataset
-            if current_user_item and item["id"] == current_user_item["id"]:
-                continue
+            # Current user is no longer skipped from the results
             
             score = float(cosine_similarity(query_embedding, item["embedding"]))
             exact_match = search_exact(q, item["text"])

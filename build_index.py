@@ -7,10 +7,26 @@ import pickle
 import time
 
 def get_catalog_connection():
-    return psycopg2.connect(host="api-db-1", port=5432, user="catalog", password="catalog", dbname="catalog", connect_timeout=5)
+    return psycopg2.connect(
+        host="ep-dry-mouse-a23cg586-pooler.eu-central-1.aws.neon.tech", 
+        port=5432, 
+        user="neondb_owner", 
+        password="npg_CETMGsq26xYo", 
+        dbname="neondb", 
+        sslmode="require",
+        connect_timeout=10
+    )
 
 def get_laravel_connection():
-    return psycopg2.connect(host="laravel_db", port=5432, user="root", password="secret", dbname="backend_nakamanet", connect_timeout=5)
+    return psycopg2.connect(
+        host="ep-empty-cherry-asjuu2np-pooler.c-4.eu-central-1.aws.neon.tech", 
+        port=5432, 
+        user="neondb_owner", 
+        password="npg_cK0eQim8VGoC", 
+        dbname="neondb", 
+        sslmode="require",
+        connect_timeout=10
+    )
 
 def build():
     try:
@@ -36,15 +52,15 @@ def build():
             conn = get_catalog_connection()
             cur = conn.cursor()
             # FULL DATABASE SCAN!
-            cur.execute('SELECT id, title_en, title_jp, synopsis FROM "Anime"')
+            cur.execute('SELECT id, title_en, title_jp, synopsis, slug FROM "Anime"')
             for row in cur.fetchall():
                 text = f"Anime: {row[1]} {row[2]}. {row[3]}"
-                items.append({"id": f"anime_{row[0]}", "type": "anime", "title": row[1] or row[2] or "Anime", "description": (row[3][:120]+'...') if row[3] else "", "text": text})
+                items.append({"id": f"anime_{row[0]}", "type": "anime", "title": row[1] or row[2] or "Anime", "description": (row[3][:120]+'...') if row[3] else "", "text": text, "slug": row[4]})
             
-            cur.execute('SELECT id, title_en, title_jp, synopsis FROM "Manga"')
+            cur.execute('SELECT id, title_en, title_jp, synopsis, slug FROM "Manga"')
             for row in cur.fetchall():
                 text = f"Manga: {row[1]} {row[2]}. {row[3]}"
-                items.append({"id": f"manga_{row[0]}", "type": "manga", "title": row[1] or row[2] or "Manga", "description": (row[3][:120]+'...') if row[3] else "", "text": text})
+                items.append({"id": f"manga_{row[0]}", "type": "manga", "title": row[1] or row[2] or "Manga", "description": (row[3][:120]+'...') if row[3] else "", "text": text, "slug": row[4]})
             cur.close()
             conn.close()
         except Exception as e:
@@ -78,8 +94,10 @@ def build():
             except Exception as e:
                 print(f"Error fetching Manga Library: {e}", flush=True)
 
-            cur.execute('SELECT id, username, bio FROM "Users" WHERE is_deleted = false')
+            user_map = {}
+            cur.execute('SELECT id, username, bio, avatar_url FROM "Users" WHERE is_deleted = false')
             for row in cur.fetchall():
+                user_map[row[0]] = row[1]
                 text = f"User: {row[1]}. Bio: {row[2]}"
                 items.append({
                     "id": f"user_{row[0]}", 
@@ -88,13 +106,26 @@ def build():
                     "description": (row[2][:120]+'...') if row[2] else "", 
                     "text": text,
                     "anime_library": list(anime_libraries.get(row[0], set())),
-                    "manga_library": list(manga_libraries.get(row[0], set()))
+                    "manga_library": list(manga_libraries.get(row[0], set())),
+                    "user_id": row[0],
+                    "avatar_url": row[3] if row[3] else None
                 })
             
-            cur.execute('SELECT id, content FROM "Posts"')
+            cur.execute('SELECT id, user_id, content FROM "Posts"')
             for row in cur.fetchall():
-                text = f"Community Post: {row[1]}"
-                items.append({"id": f"post_{row[0]}", "type": "posts", "title": f"Post #{row[0]}", "description": (row[1][:120]+'...') if row[1] else "", "text": text})
+                username = user_map.get(row[1], "Unknown User")
+                text = f"Community Post by {username}: {row[2]}"
+                items.append({"id": f"post_{row[0]}", "type": "posts", "title": f"Post by {username}", "description": (row[2][:120]+'...') if row[2] else "", "text": text, "post_id": row[0]})
+                
+            try:
+                cur.execute('SELECT id, user_id, title, content FROM "Forum_Topics"')
+                for row in cur.fetchall():
+                    username = user_map.get(row[1], "Unknown User")
+                    text = f"Forum Topic by {username}: {row[2]}. {row[3]}"
+                    items.append({"id": f"forum_{row[0]}", "type": "forums", "title": f"Forum: {row[2]}", "description": (row[3][:120]+'...') if row[3] else "", "text": text, "forum_id": row[0]})
+            except Exception as e:
+                print(f"Error fetching Forum Topics: {e}", flush=True)
+                
             cur.close()
             conn.close()
         except Exception as e:
