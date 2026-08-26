@@ -184,8 +184,8 @@ def build():
         os.rename("ai_index.pkl.tmp", "ai_index.pkl")
         
         print(f"Index Builder: Successfully synchronized {len(items)} items!", flush=True)
-        # Re-build index every 5 minutes to keep results fresh
-        time.sleep(300)
+        # Re-build index every 7 days to keep results fresh and avoid NeonDB charges
+        time.sleep(604800)
 
 if __name__ == "__main__":
     print("Starting background AI Index Builder process...", flush=True)
